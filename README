@@ -1,2 +1,5 @@
 This chatroom program was made using java.net package.
 The ChatRoom program contains both the server and the client.
+
+To host a server, choose the port and the nickname and press "host server"
+To join a chat room, enter server's ip address, port, and your nickname and press "enter room"
