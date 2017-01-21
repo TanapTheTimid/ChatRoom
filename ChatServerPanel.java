@@ -13,6 +13,7 @@ public class ChatServerPanel extends JPanel
     private String nickname;
     private String serverIp;
     private int serverPort;
+    private String password;
     //gui components that can be updated
     private JTextArea chatText;
     private JScrollPane scroller;
@@ -21,11 +22,12 @@ public class ChatServerPanel extends JPanel
     private ServerSocket serverSocket;
     //list of client handlers
     private List<ClientService> clientServices = new ArrayList<>();
-    public ChatServerPanel(String ip, int port, String name){
+    public ChatServerPanel(String ip, int port, String name, String pass){
         super();
         serverIp = ip;
         serverPort = port;
         nickname = name;
+        password = pass;
     }
 
     public void enterChatRoom(){
@@ -42,7 +44,7 @@ public class ChatServerPanel extends JPanel
         chatText = new JTextArea();
         chatText.setEditable(false);
         scroller = new JScrollPane(chatText, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
-            JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+            JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scroller.setPreferredSize(new Dimension(500,340));
 
         //input field for sending messages
@@ -61,7 +63,7 @@ public class ChatServerPanel extends JPanel
         onlines = new JTextArea();
         onlines.setEditable(false);
         JScrollPane onlineScroll  = new JScrollPane(onlines, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
-                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         onlineScroll.setPreferredSize(new Dimension(100,400));
         onlines.setText("Users:\n"+nickname);
         //adds components
@@ -108,8 +110,6 @@ public class ChatServerPanel extends JPanel
                                 ClientService service = new ClientService(socket);
                                 //start the service to receive messages from client
                                 service.start();
-                                //add the service to list of client services-- used when sending messages
-                                clientServices.add(service);
                             }
                         }catch(IOException ex){//if io exception happens
                             ex.printStackTrace();
@@ -138,6 +138,8 @@ public class ChatServerPanel extends JPanel
         private AtomicReference<ObjectInputStream> in = new AtomicReference<ObjectInputStream>();
         //nickname of the client
         private String nickname;
+        //authentication
+        private byte[] salt;
 
         public ClientService(Socket socket){
             super();
@@ -165,7 +167,8 @@ public class ChatServerPanel extends JPanel
             }
         }
 
-        //sends an object to the client
+        //sends an object to the client-- ONLY THIS CLIENT
+        //when sending to all clients, use SENDMESSAGE method
         public void sendObject(Object ob){
             try{
                 out.get().writeObject(ob);
@@ -184,10 +187,25 @@ public class ChatServerPanel extends JPanel
             FutureTask<Void> task = new FutureTask<Void>(new Callable<Void>(){
                         public Void call(){
                             try{
-                                //first thing when connected, wait for client to send its nickname
+                                //wait for client to send its nickname
                                 nickname = in.get().readObject().toString();
+                                salt = Hash.getRandomSalt();
+                                sendObject(salt);
+                                //authentication
+                                byte[] receivedHash = (byte[]) in.get().readObject();
+                                while(!Hash.verifyPassword(password, salt, receivedHash)){
+                                    sendObject(ChatRoom.WRONG_PASSWORD);
+                                    receivedHash = (byte[]) in.get().readObject();
+                                }
+                                sendObject(new String("Authenticated!"));
+                                
+                                //add the service to list of client services-- used when sending messages
+                                clientServices.add(clientService);
+                                
                                 onlines.append("\n"+nickname);//add to list of onlines
                                 updateOnlines();
+                                
+                                sendMessage(nickname + " joined the chat!");
                             }catch(ClassNotFoundException e){
                                 e.printStackTrace();
                             }catch(IOException e){

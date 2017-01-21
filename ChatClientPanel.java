@@ -4,13 +4,15 @@ import java.awt.event.*;
 import java.net.*;
 import java.io.*;
 import java.util.concurrent.*;
-
+import java.util.ArrayList;
+import java.util.Arrays;
 public class ChatClientPanel extends JPanel
 {
     //info for the client
     private String nickname;
     private String serverIp;
     private int serverPort;
+    private String password;
     //window components that needs accesibility
     private JTextArea chatText;
     private JScrollPane scroller;
@@ -21,11 +23,15 @@ public class ChatClientPanel extends JPanel
     //output stream for sending message to server
     private ObjectOutputStream outStream;
     private ObjectInputStream inStream;
-    public ChatClientPanel(String ip, int port, String name){
+    //authentication
+    private boolean authenticated = false;
+    private byte[] salt;
+    public ChatClientPanel(String ip, int port, String name, String pass){
         super();
         serverIp = ip;
         serverPort = port;
         nickname = name;
+        password = pass;
     }
 
     public void enterChatRoom(){
@@ -41,7 +47,7 @@ public class ChatClientPanel extends JPanel
         chatText = new JTextArea();
         chatText.setEditable(false);
         scroller = new JScrollPane(chatText, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
-            JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+            JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scroller.setPreferredSize(new Dimension(500,340));
 
         input = new JTextField();
@@ -49,9 +55,24 @@ public class ChatClientPanel extends JPanel
         input.addActionListener((ActionEvent ev) -> {
                 try{
                     String intxt = input.getText();
-                    if(!intxt.replaceAll("\\s","").isEmpty()){
+                    if(!authenticated){
+                        outStream.writeObject(Hash.hash(intxt,salt));
+                    }
+                    else if(!intxt.replaceAll("\\s","").isEmpty()){
                         String s = new String(nickname+": "+ intxt);
-                        outStream.writeObject(s);
+                        int lastx = 0;
+                        int x = 0;
+                        for(x= 0; x <= s.length(); x++){
+                            if(x % 50 == 49){
+                                outStream.writeObject(s.substring(lastx, x));
+                                lastx = x;
+                            }
+                        }
+                        
+                        if(lastx < s.length()){
+                            outStream.writeObject(s.substring(lastx, s.length()));
+                        }
+                        
                         input.setText("");
                     }
                 }catch(IOException e){
@@ -62,7 +83,7 @@ public class ChatClientPanel extends JPanel
         onlines = new JTextArea();
         onlines.setEditable(false);
         JScrollPane onlineScroll  = new JScrollPane(onlines, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
-                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         onlineScroll.setPreferredSize(new Dimension(100,400));
         onlines.setText("Users:");
 
@@ -111,16 +132,43 @@ public class ChatClientPanel extends JPanel
         }
         //when successful
         setupStreams();
-        //write nickname to server
+        //send nickname
+        input.setText("");
         try{
             outStream.writeObject(new String(nickname));
-            //notify everyone of entry
-            outStream.writeObject(new String(nickname + " joined the chat room!"));
+            salt = (byte[]) inStream.readObject();
+            
+            input.setEditable(true);
+
+            String message;
+            outStream.writeObject(Hash.hash(password,salt));
+            do{
+                message = (String) inStream.readObject();
+                appendText(message);
+            }while(message.equals(ChatRoom.WRONG_PASSWORD));
+            
+            authenticated = true;
         }catch(IOException ex){
             ex.printStackTrace();
+        }catch(ClassNotFoundException ex){
+            System.out.println("the heck is the server sending????? (authentication phase)");
         }
-        //enable sending messages
-        input.setEditable(true);
+    }
+
+    public void appendText(String s){
+        //checks if the scroll bar is at the bottom of the screen before appending text
+        boolean maxScroll = false;
+        JScrollBar vbar = scroller.getVerticalScrollBar();
+        int extent = vbar.getModel().getExtent();
+        if(vbar.getValue()+extent == vbar.getMaximum()){
+            maxScroll = true;
+        }
+        //appends text
+        chatText.append("\n" + s);
+        //if scroll bar WAS at the btm, then move it down, else dont because the user might be looking at history
+        if(maxScroll){
+            chatText.setCaretPosition(chatText.getDocument().getLength()-1);
+        }
     }
 
     //connects to server and waits for messages
@@ -157,22 +205,6 @@ public class ChatClientPanel extends JPanel
                                                 attemptConnection();
                                                 appendText("Reconnected!");
                                             }
-                                        }
-                                    }
-
-                                    public void appendText(String s){
-                                        //checks if the scroll bar is at the bottom of the screen before appending text
-                                        boolean maxScroll = false;
-                                        JScrollBar vbar = scroller.getVerticalScrollBar();
-                                        int extent = vbar.getModel().getExtent();
-                                        if(vbar.getValue()+extent == vbar.getMaximum()){
-                                            maxScroll = true;
-                                        }
-                                        //appends text
-                                        chatText.append("\n" + s);
-                                        //if scroll bar WAS at the btm, then move it down, else dont because the user might be looking at history
-                                        if(maxScroll){
-                                            chatText.setCaretPosition(chatText.getDocument().getLength()-1);
                                         }
                                     }
                                 });
