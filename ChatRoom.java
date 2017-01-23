@@ -10,6 +10,7 @@ public class ChatRoom
 {
     public static final String WRONG_PASSWORD = "Authentication failed. Please try again...\nEnter password:";
 
+    private static final String DEFAULT_PASSWORD = "PASSWORD";
     //default port of the server
     private static final int DEFAULT_PORT = 24686;
     //info used to create server or client
@@ -76,6 +77,9 @@ public class ChatRoom
                 serverPort = Integer.valueOf(portField.getText());
                 nickname = nameField.getText();
                 password = passField.getText();
+                if(password.isEmpty()){
+                    password = DEFAULT_PASSWORD;
+                }
                 //create a new client Panel object
                 ChatClientPanel client = new ChatClientPanel(serverIp, serverPort, nickname, password);
                 //sets up window
@@ -92,6 +96,10 @@ public class ChatRoom
                 serverPort = Integer.valueOf(portField.getText());
                 nickname = nameField.getText();
                 password = passField.getText();
+                
+                if(password.isEmpty()){
+                    password = DEFAULT_PASSWORD;
+                }
                 //create a new server Panel object
                 ChatServerPanel cserver = new ChatServerPanel(serverIp, serverPort, nickname, password);
                 //setup window

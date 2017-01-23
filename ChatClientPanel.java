@@ -6,6 +6,7 @@ import java.io.*;
 import java.util.concurrent.*;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 public class ChatClientPanel extends JPanel
 {
     //info for the client
@@ -26,6 +27,7 @@ public class ChatClientPanel extends JPanel
     //authentication
     private boolean authenticated = false;
     private byte[] salt;
+    private byte[] networkWideSalt;
     public ChatClientPanel(String ip, int port, String name, String pass){
         super();
         serverIp = ip;
@@ -56,23 +58,49 @@ public class ChatClientPanel extends JPanel
                 try{
                     String intxt = input.getText();
                     if(!authenticated){
+                        password = intxt;
                         outStream.writeObject(Hash.hash(intxt,salt));
                     }
                     else if(!intxt.replaceAll("\\s","").isEmpty()){
                         String s = new String(nickname+": "+ intxt);
-                        int lastx = 0;
+                        appendText(s);
+                        
+                        LinkedList<Character> charList = new LinkedList<>();
+
+                        for(char c: s.toCharArray()){
+                            charList.add(c);
+                        }
+
                         int x = 0;
-                        for(x= 0; x <= s.length(); x++){
-                            if(x % 50 == 49){
-                                outStream.writeObject(s.substring(lastx, x));
-                                lastx = x;
+                        int y = 0;
+                        while(y < charList.size()){
+                            if(x % 60 == 59){
+                                if(!(charList.get(y).charValue() == ' ')){
+                                    y++;
+                                    continue;
+                                }else{
+                                    charList.add(y, '\n');
+                                }
                             }
+                            x++;
+                            y++;
                         }
-                        
-                        if(lastx < s.length()){
-                            outStream.writeObject(s.substring(lastx, s.length()));
+
+                        String finalMsg = new String();
+
+                        for(char c: charList){
+                            finalMsg = finalMsg + c;
                         }
-                        
+
+                        Encryption encrypt = new Encryption(password, networkWideSalt);
+                        byte[] msgByte = encrypt.encrypt(finalMsg);
+
+                        MessageHolder mh = new MessageHolder();
+                        mh.msg = msgByte;
+                        mh.iv = encrypt.ivBytes;
+
+                        outStream.writeObject(mh);
+
                         input.setText("");
                     }
                 }catch(IOException e){
@@ -137,7 +165,7 @@ public class ChatClientPanel extends JPanel
         try{
             outStream.writeObject(new String(nickname));
             salt = (byte[]) inStream.readObject();
-            
+
             input.setEditable(true);
 
             String message;
@@ -146,7 +174,9 @@ public class ChatClientPanel extends JPanel
                 message = (String) inStream.readObject();
                 appendText(message);
             }while(message.equals(ChatRoom.WRONG_PASSWORD));
-            
+
+            networkWideSalt = (byte[])inStream.readObject();
+
             authenticated = true;
         }catch(IOException ex){
             ex.printStackTrace();
@@ -191,7 +221,11 @@ public class ChatClientPanel extends JPanel
                                                 if(obj instanceof OnlineUsers){
                                                     onlines.setText(((OnlineUsers) obj).get());
                                                 }else{
-                                                    appendText(((String)obj).toString());
+                                                    //appends message to the chat window
+                                                    MessageHolder s = (MessageHolder) obj;
+                                                    Encryption enc = new Encryption(password, networkWideSalt);
+                                                    String decryptedText = enc.decrypt(s.msg,s.iv );
+                                                    appendText(decryptedText);
                                                 }
                                             }catch(ClassNotFoundException e){
                                                 //idk what the heck you sent

@@ -7,9 +7,12 @@ import java.util.concurrent.*;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.*;
+import java.util.Arrays;
+import java.util.LinkedList;
 public class ChatServerPanel extends JPanel
 {
     //info for server
+    private byte[] globalPasswordSalt;
     private String nickname;
     private String serverIp;
     private int serverPort;
@@ -28,6 +31,7 @@ public class ChatServerPanel extends JPanel
         serverPort = port;
         nickname = name;
         password = pass;
+        globalPasswordSalt = Hash.getRandomSalt();
     }
 
     public void enterChatRoom(){
@@ -54,7 +58,44 @@ public class ChatServerPanel extends JPanel
                 String intxt = input.getText();
                 if(!intxt.replace("\\s","").isEmpty()){
                     String s = new String(nickname+": " + intxt);
-                    sendMessage(s);
+                    
+                    sendToSelf(s);
+
+                    LinkedList<Character> charList = new LinkedList<>();
+
+                    for(char c: s.toCharArray()){
+                        charList.add(c);
+                    }
+
+                    int x = 0;
+                    int y = 0;
+                    while(y < charList.size()){
+                        if(x % 60 == 59){
+                            if(!(charList.get(y).charValue() == ' ')){
+                                y++;
+                                continue;
+                            }else{
+                                charList.add(y, '\n');
+                            }
+                        }
+                        x++;
+                        y++;
+                    }
+
+                    String finalMsg = new String();
+
+                    for(char c: charList){
+                        finalMsg = finalMsg + c;
+                    }
+
+                    Encryption encrypt = new Encryption(password, globalPasswordSalt);
+                    byte[] msgByte = encrypt.encrypt(finalMsg);
+
+                    MessageHolder mh = new MessageHolder();
+                    mh.msg = msgByte;
+                    mh.iv = encrypt.ivBytes;
+
+                    sendMessage(mh, false, null);
                     input.setText("");
                 }
             });
@@ -72,7 +113,10 @@ public class ChatServerPanel extends JPanel
         add(input,BorderLayout.SOUTH);
     }
 
-    public void sendMessage(String s){
+    public void sendToSelf(String decryptedText){
+        //appends message to the chat window
+        chatText.append("\n" + decryptedText);
+
         //checks if the scroll bar is at the bottom of the screen before appending text
         boolean maxScroll = false;
         JScrollBar vbar = scroller.getVerticalScrollBar();
@@ -81,14 +125,23 @@ public class ChatServerPanel extends JPanel
             maxScroll = true;
         }
 
-        //appends message to the chat window and sends it to client
-        chatText.append("\n" + s);
-        clientServices.forEach((clientService) -> {
-                clientService.sendObject(s);
-            });
         //if scroll bar WAS at the btm, then move it down, else dont because the user might be looking at history
         if(maxScroll){
             chatText.setCaretPosition(chatText.getDocument().getLength()-1);
+        }
+    }
+
+    public void sendMessage(MessageHolder s, boolean toSelf, ClientService originator){
+        // sends it to client
+        clientServices.forEach((clientService) -> {
+                if(!clientService.equals(originator))
+                    clientService.sendObject(s);
+            });
+        
+        if(toSelf){
+            Encryption enc = new Encryption(password, globalPasswordSalt);
+            String decryptedText = enc.decrypt(s.msg,s.iv );
+            sendToSelf(decryptedText);
         }
     }
 
@@ -198,14 +251,16 @@ public class ChatServerPanel extends JPanel
                                     receivedHash = (byte[]) in.get().readObject();
                                 }
                                 sendObject(new String("Authenticated!"));
-                                
+
+                                sendObject(globalPasswordSalt);
+
                                 //add the service to list of client services-- used when sending messages
                                 clientServices.add(clientService);
-                                
+
                                 onlines.append("\n"+nickname);//add to list of onlines
                                 updateOnlines();
-                                
-                                sendMessage(nickname + " joined the chat!");
+
+                                //sendMessage(nickname + " joined the chat!");
                             }catch(ClassNotFoundException e){
                                 e.printStackTrace();
                             }catch(IOException e){
@@ -214,12 +269,12 @@ public class ChatServerPanel extends JPanel
                             while(true){
                                 try{
                                     //wait for message then call sendMessage(String s);
-                                    sendMessage(in.get().readObject().toString());
+                                    sendMessage((MessageHolder)in.get().readObject(), true, ClientService.this);
                                 }catch(ClassNotFoundException ex){
                                     ex.printStackTrace();
                                 }catch(IOException ex){
                                     //if client disconnects
-                                    sendMessage(nickname + " left the chat room.");
+                                    //sendMessage(nickname + " left the chat room.");
                                     //close streams and socket
                                     try{
                                         in.get().close();
