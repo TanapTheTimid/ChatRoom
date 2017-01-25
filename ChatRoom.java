@@ -10,6 +10,8 @@ public class ChatRoom
 {
     public static final String WRONG_PASSWORD = "Authentication failed. Please try again...\nEnter password:";
     public static final String KICKED_MESSAGE = "You have been kicked!";
+    public static final String BANNED_MESSAGE = "You are banned from this server.";
+    public static final String ACCEPTED_MESSAGE = "joined";
     
     private static final String DEFAULT_PASSWORD = "PASSWORD";
     //default port of the server

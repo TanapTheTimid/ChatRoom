@@ -64,7 +64,7 @@ public class ChatClientPanel extends JPanel
                     else if(!intxt.replaceAll("\\s","").isEmpty()){
                         String s = new String(nickname+": "+ intxt);
                         appendText(s);
-                        
+
                         LinkedList<Character> charList = new LinkedList<>();
 
                         for(char c: s.toCharArray()){
@@ -164,6 +164,14 @@ public class ChatClientPanel extends JPanel
         //send nickname
         input.setText("");
         try{
+            String acceptance = (String) inStream.readObject();
+
+            if(acceptance.equals(ChatRoom.BANNED_MESSAGE)){
+                closeStreams();
+                JOptionPane.showMessageDialog(null, ChatRoom.BANNED_MESSAGE);
+                System.exit(0);
+            }
+
             outStream.writeObject(new String(nickname));
             salt = (byte[]) inStream.readObject();
 
@@ -226,8 +234,9 @@ public class ChatClientPanel extends JPanel
                                                     MessageHolder s = (MessageHolder) obj;
                                                     Encryption enc = new Encryption(password, networkWideSalt);
                                                     String decryptedText = enc.decrypt(s.msg,s.iv );
-                                                    if(decryptedText == ChatRoom.KICKED_MESSAGE){
+                                                    if(decryptedText.equals(ChatRoom.KICKED_MESSAGE)){
                                                         closeStreams();
+                                                        JOptionPane.showMessageDialog(null, "You have been kicked!");
                                                         System.exit(0);
                                                     }
                                                     appendText(decryptedText);

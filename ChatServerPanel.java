@@ -11,7 +11,8 @@ import java.util.Arrays;
 import java.util.LinkedList;
 public class ChatServerPanel extends JPanel
 {
-    private final String[] OPTIONS = {"Cancel", "Kick", "Ban"};
+    private final String[] OPTIONS_CLIENT = {"Cancel", "Kick", "Ban IP"};
+    private final String[] OPTIONS_IP = {"Cancel", "Unban IP"};
 
     //info for server
     private byte[] globalPasswordSalt;
@@ -24,6 +25,7 @@ public class ChatServerPanel extends JPanel
     private JScrollPane scroller;
     private JList onlines;
     private DefaultListModel onlinesListModel;
+    private DefaultListModel bannedListModel;
     //serversocket for accepting connection
     private ServerSocket serverSocket;
     //list of client handlers
@@ -52,7 +54,7 @@ public class ChatServerPanel extends JPanel
         chatText.setEditable(false);
         scroller = new JScrollPane(chatText, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
             JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        scroller.setPreferredSize(new Dimension(500,340));
+        scroller.setPreferredSize(new Dimension(400,340));
 
         //input field for sending messages
         JTextField input = new JTextField();
@@ -83,12 +85,15 @@ public class ChatServerPanel extends JPanel
                         int index = onlines.locationToIndex(e.getPoint());
                         if(index > 0){
                             int selectedValue = JOptionPane.showOptionDialog(null, onlinesListModel.get(index),"Options"
-                                , JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE
-                                , null, OPTIONS, OPTIONS[0]);
+                                , JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE
+                                , null, OPTIONS_CLIENT, OPTIONS_CLIENT[0]);
 
                             if(selectedValue == 1){
                                 clientServices.get(index-1).kick();
-                                
+                            }else if(selectedValue == 2){
+                                ClientService cs = clientServices.get(index-1);
+                                bannedListModel.addElement(cs.getIpAddress());
+                                cs.kick();
                             }
                         }else{
                             JOptionPane.showMessageDialog(null, "Server");
@@ -100,8 +105,41 @@ public class ChatServerPanel extends JPanel
         JScrollPane onlineScroll  = new JScrollPane(onlines, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
                 JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         onlineScroll.setPreferredSize(new Dimension(100,400));
+
+        //banned list
+        //text area for showing online users
+        bannedListModel = new DefaultListModel();
+        bannedListModel.addElement("Banned IP(s):");
+
+        JList banned = new JList(bannedListModel);
+        banned.setSelectionMode(ListSelectionModel.SINGLE_INTERVAL_SELECTION);
+        banned.setLayoutOrientation(JList.VERTICAL);
+        
+        banned.addMouseListener(new MouseAdapter(){
+                public void mouseClicked(MouseEvent e){
+                    if(e.getClickCount() == 2){
+                        int index = banned.locationToIndex(e.getPoint());
+                        if(index > 0){
+                            int selectedValue = JOptionPane.showOptionDialog(null, bannedListModel.get(index),"Options"
+                                , JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE
+                                , null, OPTIONS_IP, OPTIONS_IP[0]);
+
+                            if(selectedValue == 1){
+                                bannedListModel.remove(index);
+                            }
+                        }
+                    }
+                }
+            });
+
+        JScrollPane bannedPane  = new JScrollPane(banned, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        bannedPane.setPreferredSize(new Dimension(100,400));
+        bannedPane.setLocation(100,0);
+
         //adds components
         add(onlineScroll,BorderLayout.WEST);
+        add(bannedPane, BorderLayout.EAST);
         add(scroller,BorderLayout.CENTER);
         add(input,BorderLayout.SOUTH);
     }
@@ -197,6 +235,12 @@ public class ChatServerPanel extends JPanel
                             }
                         }catch(IOException ex){//if io exception happens
                             ex.printStackTrace();
+                        }finally{
+                            try{
+                                serverSocket.close();
+                            }catch(IOException e){
+                                e.printStackTrace();
+                            }
                         }
                         return null;
                     }
@@ -215,8 +259,6 @@ public class ChatServerPanel extends JPanel
         private Socket socket;
         //client info
         private String ip;
-        //reference to this client service for removing itself from the list of clientServices
-        private ClientService clientService;
         //Atomic Reference - referencing the output stream and input stream
         private AtomicReference<ObjectOutputStream> out = new AtomicReference<ObjectOutputStream>();
         private AtomicReference<ObjectInputStream> in = new AtomicReference<ObjectInputStream>();
@@ -229,10 +271,11 @@ public class ChatServerPanel extends JPanel
             super();
             this.socket = socket;
             ip = socket.getInetAddress().getHostAddress();
-            clientService = this;
         }
 
         public String getNickname(){return nickname;}
+
+        public String getIpAddress(){return ip;}
 
         //start this client and runs
         public void start(){
@@ -274,8 +317,12 @@ public class ChatServerPanel extends JPanel
         }
 
         public void kick(){
+            sendObject(encrypt(ChatRoom.KICKED_MESSAGE));
+            closeStreams();
+        }
+
+        public void closeStreams(){
             try{
-                sendObject(encrypt(ChatRoom.KICKED_MESSAGE));
                 out.get().close();
                 in.get().close();
                 socket.close();
@@ -289,6 +336,21 @@ public class ChatServerPanel extends JPanel
             FutureTask<Void> task = new FutureTask<Void>(new Callable<Void>(){
                         public Void call(){
                             try{
+                                int count = 1;
+                                while(count < bannedListModel.getSize()){
+                                    if(bannedListModel.get(count).equals(ip)){
+                                        sendObject(ChatRoom.BANNED_MESSAGE);
+                                        clientServices.remove(ClientService.this);
+                                        closeStreams();
+                                        //quit this task
+                                        return null;
+                                    }
+                                    count++;
+                                }
+                                if(count >= bannedListModel.getSize()){
+                                    sendObject(ChatRoom.ACCEPTED_MESSAGE);
+                                }
+
                                 //wait for client to send its nickname
                                 nickname = in.get().readObject().toString();
                                 salt = Hash.getRandomSalt();
@@ -304,7 +366,7 @@ public class ChatServerPanel extends JPanel
                                 sendObject(globalPasswordSalt);
 
                                 //add the service to list of client services-- used when sending messages
-                                clientServices.add(clientService);
+                                clientServices.add(ClientService.this);
 
                                 onlinesListModel.addElement(nickname);//add to list of onlines
                                 updateOnlines();
@@ -339,21 +401,11 @@ public class ChatServerPanel extends JPanel
                                             onlinesListModel.remove(x);
                                         }
                                     }
-                                    /*
-                                    OnlineUsers on = new OnlineUsers(s);
-
-                                    String name = onlines.getText();
-                                    int index = name.indexOf(nickname);
-                                    char[] namearr = name.toCharArray();
-                                    for(int x = index-1; x < namearr.length;x++){
-                                    namearr[x] = 0;
-                                    }
-                                    onlines.setText(new String(namearr));
-                                     */
 
                                     updateOnlines();
+                                    closeStreams();
                                     //remove this clientservice from the list
-                                    clientServices.remove(clientService);
+                                    clientServices.remove(ClientService.this);
                                     //quit this task
                                     return null;
                                 }
