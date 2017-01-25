@@ -73,6 +73,7 @@ public class ChatServerPanel extends JPanel
 
         //text area for showing online users
         onlinesListModel = new DefaultListModel();
+        onlinesListModel.addElement("~OPTIONS~");
         onlinesListModel.addElement(nickname);
 
         onlines = new JList(onlinesListModel);
@@ -83,19 +84,24 @@ public class ChatServerPanel extends JPanel
                 public void mouseClicked(MouseEvent e){
                     if(e.getClickCount() == 2){
                         int index = onlines.locationToIndex(e.getPoint());
-                        if(index > 0){
+                        if(index > 1){
                             int selectedValue = JOptionPane.showOptionDialog(null, onlinesListModel.get(index),"Options"
                                 , JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE
                                 , null, OPTIONS_CLIENT, OPTIONS_CLIENT[0]);
 
+                            ClientService cs = clientServices.get(index-2);
+                            
                             if(selectedValue == 1){
-                                clientServices.get(index-1).kick();
+                                cs.kick();
+                                sendToSelf(cs.getNickname()+" has been kicked!");
+                                sendMessage(encrypt(cs.getNickname()+" has been kicked!"), false, null);
                             }else if(selectedValue == 2){
-                                ClientService cs = clientServices.get(index-1);
                                 bannedListModel.addElement(cs.getIpAddress());
                                 cs.kick();
+                                sendToSelf(cs.getNickname()+" has been banned!");
+                                sendMessage(encrypt(cs.getNickname()+" has been banned!"), false, null);
                             }
-                        }else{
+                        }else if(index == 1){
                             JOptionPane.showMessageDialog(null, "Server");
                         }
                     }
@@ -136,7 +142,7 @@ public class ChatServerPanel extends JPanel
                 JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         bannedPane.setPreferredSize(new Dimension(100,400));
         bannedPane.setLocation(100,0);
-
+        
         //adds components
         add(onlineScroll,BorderLayout.WEST);
         add(bannedPane, BorderLayout.EAST);
@@ -308,7 +314,7 @@ public class ChatServerPanel extends JPanel
 
         public void updateOnlines(){
             String s = "";
-            for(int x = 0; x < onlinesListModel.getSize(); x++){
+            for(int x = 1; x < onlinesListModel.getSize(); x++){
                 s += onlinesListModel.getElementAt(x)+ "\n";
             }
 
@@ -396,7 +402,7 @@ public class ChatServerPanel extends JPanel
                                     }
                                     //remove the name from online
 
-                                    for(int x = 0; x < onlinesListModel.getSize(); x++){
+                                    for(int x = 1; x < onlinesListModel.getSize(); x++){
                                         if(onlinesListModel.getElementAt(x) == nickname){
                                             onlinesListModel.remove(x);
                                         }
