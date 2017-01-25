@@ -9,7 +9,8 @@ import java.util.Random;
 public class ChatRoom
 {
     public static final String WRONG_PASSWORD = "Authentication failed. Please try again...\nEnter password:";
-
+    public static final String KICKED_MESSAGE = "You have been kicked!";
+    
     private static final String DEFAULT_PASSWORD = "PASSWORD";
     //default port of the server
     private static final int DEFAULT_PORT = 24686;

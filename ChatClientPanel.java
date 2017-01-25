@@ -142,6 +142,7 @@ public class ChatClientPanel extends JPanel
     }
 
     private void attemptConnection(){
+        authenticated = false;
         while(true){
             try{
                 socket = new Socket(serverIp,serverPort);
@@ -225,6 +226,10 @@ public class ChatClientPanel extends JPanel
                                                     MessageHolder s = (MessageHolder) obj;
                                                     Encryption enc = new Encryption(password, networkWideSalt);
                                                     String decryptedText = enc.decrypt(s.msg,s.iv );
+                                                    if(decryptedText == ChatRoom.KICKED_MESSAGE){
+                                                        closeStreams();
+                                                        System.exit(0);
+                                                    }
                                                     appendText(decryptedText);
                                                 }
                                             }catch(ClassNotFoundException e){

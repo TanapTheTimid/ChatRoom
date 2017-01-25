@@ -11,6 +11,8 @@ import java.util.Arrays;
 import java.util.LinkedList;
 public class ChatServerPanel extends JPanel
 {
+    private final String[] OPTIONS = {"Cancel", "Kick", "Ban"};
+
     //info for server
     private byte[] globalPasswordSalt;
     private String nickname;
@@ -20,7 +22,8 @@ public class ChatServerPanel extends JPanel
     //gui components that can be updated
     private JTextArea chatText;
     private JScrollPane scroller;
-    private JTextArea onlines;
+    private JList onlines;
+    private DefaultListModel onlinesListModel;
     //serversocket for accepting connection
     private ServerSocket serverSocket;
     //list of client handlers
@@ -58,59 +61,87 @@ public class ChatServerPanel extends JPanel
                 String intxt = input.getText();
                 if(!intxt.replace("\\s","").isEmpty()){
                     String s = new String(nickname+": " + intxt);
-                    
+
                     sendToSelf(s);
 
-                    LinkedList<Character> charList = new LinkedList<>();
-
-                    for(char c: s.toCharArray()){
-                        charList.add(c);
-                    }
-
-                    int x = 0;
-                    int y = 0;
-                    while(y < charList.size()){
-                        if(x % 60 == 59){
-                            if(!(charList.get(y).charValue() == ' ')){
-                                y++;
-                                continue;
-                            }else{
-                                charList.add(y, '\n');
-                            }
-                        }
-                        x++;
-                        y++;
-                    }
-
-                    String finalMsg = new String();
-
-                    for(char c: charList){
-                        finalMsg = finalMsg + c;
-                    }
-
-                    Encryption encrypt = new Encryption(password, globalPasswordSalt);
-                    byte[] msgByte = encrypt.encrypt(finalMsg);
-
-                    MessageHolder mh = new MessageHolder();
-                    mh.msg = msgByte;
-                    mh.iv = encrypt.ivBytes;
-
-                    sendMessage(mh, false, null);
+                    sendMessage(encrypt(s), false, null);
                     input.setText("");
                 }
             });
 
         //text area for showing online users
-        onlines = new JTextArea();
-        onlines.setEditable(false);
+        onlinesListModel = new DefaultListModel();
+        onlinesListModel.addElement(nickname);
+
+        onlines = new JList(onlinesListModel);
+        onlines.setSelectionMode(ListSelectionModel.SINGLE_INTERVAL_SELECTION);
+        onlines.setLayoutOrientation(JList.VERTICAL);
+
+        onlines.addMouseListener(new MouseAdapter(){
+                public void mouseClicked(MouseEvent e){
+                    if(e.getClickCount() == 2){
+                        int index = onlines.locationToIndex(e.getPoint());
+                        if(index > 0){
+                            int selectedValue = JOptionPane.showOptionDialog(null, onlinesListModel.get(index),"Options"
+                                , JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE
+                                , null, OPTIONS, OPTIONS[0]);
+
+                            if(selectedValue == 1){
+                                clientServices.get(index-1).kick();
+                                
+                            }
+                        }else{
+                            JOptionPane.showMessageDialog(null, "Server");
+                        }
+                    }
+                }
+            });
+
         JScrollPane onlineScroll  = new JScrollPane(onlines, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
                 JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         onlineScroll.setPreferredSize(new Dimension(100,400));
-        onlines.setText("Users:\n"+nickname);
         //adds components
         add(onlineScroll,BorderLayout.WEST);
         add(scroller,BorderLayout.CENTER);
         add(input,BorderLayout.SOUTH);
+    }
+
+    public MessageHolder encrypt(String s){
+        LinkedList<Character> charList = new LinkedList<>();
+
+        for(char c: s.toCharArray()){
+            charList.add(c);
+        }
+
+        int x = 0;
+        int y = 0;
+        while(y < charList.size()){
+            if(x % 60 == 59){
+                if(!(charList.get(y).charValue() == ' ')){
+                    y++;
+                    continue;
+                }else{
+                    charList.add(y, '\n');
+                }
+            }
+            x++;
+            y++;
+        }
+
+        String finalMsg = new String();
+
+        for(char c: charList){
+            finalMsg = finalMsg + c;
+        }
+
+        Encryption encrypt = new Encryption(password, globalPasswordSalt);
+        byte[] msgByte = encrypt.encrypt(finalMsg);
+
+        MessageHolder mh = new MessageHolder();
+        mh.msg = msgByte;
+        mh.iv = encrypt.ivBytes;
+
+        return mh;
     }
 
     public void sendToSelf(String decryptedText){
@@ -137,7 +168,7 @@ public class ChatServerPanel extends JPanel
                 if(!clientService.equals(originator))
                     clientService.sendObject(s);
             });
-        
+
         if(toSelf){
             Encryption enc = new Encryption(password, globalPasswordSalt);
             String decryptedText = enc.decrypt(s.msg,s.iv );
@@ -201,6 +232,8 @@ public class ChatServerPanel extends JPanel
             clientService = this;
         }
 
+        public String getNickname(){return nickname;}
+
         //start this client and runs
         public void start(){
             setupStreams();
@@ -231,8 +264,24 @@ public class ChatServerPanel extends JPanel
         }
 
         public void updateOnlines(){
-            OnlineUsers on = new OnlineUsers(onlines.getText());
+            String s = "";
+            for(int x = 0; x < onlinesListModel.getSize(); x++){
+                s += onlinesListModel.getElementAt(x)+ "\n";
+            }
+
+            OnlineUsers on = new OnlineUsers(s);
             sendObject(on);
+        }
+
+        public void kick(){
+            try{
+                sendObject(encrypt(ChatRoom.KICKED_MESSAGE));
+                out.get().close();
+                in.get().close();
+                socket.close();
+            }catch(IOException ex){
+                ex.printStackTrace();
+            }
         }
 
         //creates and return a task that receives and handles messages from the client
@@ -257,10 +306,10 @@ public class ChatServerPanel extends JPanel
                                 //add the service to list of client services-- used when sending messages
                                 clientServices.add(clientService);
 
-                                onlines.append("\n"+nickname);//add to list of onlines
+                                onlinesListModel.addElement(nickname);//add to list of onlines
                                 updateOnlines();
 
-                                //sendMessage(nickname + " joined the chat!");
+                                sendMessage(encrypt(nickname + " joined the chat!"), true, null);
                             }catch(ClassNotFoundException e){
                                 e.printStackTrace();
                             }catch(IOException e){
@@ -274,7 +323,7 @@ public class ChatServerPanel extends JPanel
                                     ex.printStackTrace();
                                 }catch(IOException ex){
                                     //if client disconnects
-                                    //sendMessage(nickname + " left the chat room.");
+                                    sendMessage(encrypt(nickname + " left the chat."), true, null);
                                     //close streams and socket
                                     try{
                                         in.get().close();
@@ -284,13 +333,24 @@ public class ChatServerPanel extends JPanel
                                         exx.printStackTrace();
                                     }
                                     //remove the name from online
+
+                                    for(int x = 0; x < onlinesListModel.getSize(); x++){
+                                        if(onlinesListModel.getElementAt(x) == nickname){
+                                            onlinesListModel.remove(x);
+                                        }
+                                    }
+                                    /*
+                                    OnlineUsers on = new OnlineUsers(s);
+
                                     String name = onlines.getText();
                                     int index = name.indexOf(nickname);
                                     char[] namearr = name.toCharArray();
                                     for(int x = index-1; x < namearr.length;x++){
-                                        namearr[x] = 0;
+                                    namearr[x] = 0;
                                     }
                                     onlines.setText(new String(namearr));
+                                     */
+
                                     updateOnlines();
                                     //remove this clientservice from the list
                                     clientServices.remove(clientService);
