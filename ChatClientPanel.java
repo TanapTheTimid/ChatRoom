@@ -108,6 +108,29 @@ public class ChatClientPanel extends JPanel
                 }
             });
 
+        input.addMouseListener(new MouseListener(){
+                public void mouseClicked(MouseEvent ev){
+                    input.setBackground(Color.WHITE);
+                }
+
+                public void mousePressed(MouseEvent e) {
+
+                }
+
+                public void mouseReleased(MouseEvent e) {
+
+                }
+
+                public void mouseEntered(MouseEvent e) {
+
+                }
+
+                public void mouseExited(MouseEvent e) {
+
+                }
+
+            });
+
         onlines = new JTextArea();
         onlines.setEditable(false);
         JScrollPane onlineScroll  = new JScrollPane(onlines, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS,
@@ -208,6 +231,8 @@ public class ChatClientPanel extends JPanel
         if(maxScroll){
             chatText.setCaretPosition(chatText.getDocument().getLength()-1);
         }
+        if(!input.hasFocus())
+            input.setBackground(Color.RED);
     }
 
     //connects to server and waits for messages

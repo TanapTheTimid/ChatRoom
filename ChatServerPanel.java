@@ -26,6 +26,7 @@ public class ChatServerPanel extends JPanel
     private JList onlines;
     private DefaultListModel onlinesListModel;
     private DefaultListModel bannedListModel;
+    private JTextField input;
     //serversocket for accepting connection
     private ServerSocket serverSocket;
     //list of client handlers
@@ -57,7 +58,7 @@ public class ChatServerPanel extends JPanel
         scroller.setPreferredSize(new Dimension(400,340));
 
         //input field for sending messages
-        JTextField input = new JTextField();
+        input = new JTextField();
         input.setEditable(true);
         input.addActionListener((ActionEvent ev) -> {
                 String intxt = input.getText();
@@ -68,6 +69,28 @@ public class ChatServerPanel extends JPanel
 
                     sendMessage(encrypt(s), false, null);
                     input.setText("");
+                }
+            });
+
+        input.addMouseListener(new MouseListener(){
+                public void mouseClicked(MouseEvent ev){
+                    input.setBackground(Color.WHITE);
+                }
+
+                public void mousePressed(MouseEvent e) {
+
+                }
+
+                public void mouseReleased(MouseEvent e) {
+
+                }
+
+                public void mouseEntered(MouseEvent e) {
+
+                }
+
+                public void mouseExited(MouseEvent e) {
+
                 }
             });
 
@@ -90,7 +113,7 @@ public class ChatServerPanel extends JPanel
                                 , null, OPTIONS_CLIENT, OPTIONS_CLIENT[0]);
 
                             ClientService cs = clientServices.get(index-2);
-                            
+
                             if(selectedValue == 1){
                                 cs.kick();
                                 sendToSelf(cs.getNickname()+" has been kicked!");
@@ -120,7 +143,7 @@ public class ChatServerPanel extends JPanel
         JList banned = new JList(bannedListModel);
         banned.setSelectionMode(ListSelectionModel.SINGLE_INTERVAL_SELECTION);
         banned.setLayoutOrientation(JList.VERTICAL);
-        
+
         banned.addMouseListener(new MouseAdapter(){
                 public void mouseClicked(MouseEvent e){
                     if(e.getClickCount() == 2){
@@ -142,7 +165,7 @@ public class ChatServerPanel extends JPanel
                 JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         bannedPane.setPreferredSize(new Dimension(100,400));
         bannedPane.setLocation(100,0);
-        
+
         //adds components
         add(onlineScroll,BorderLayout.WEST);
         add(bannedPane, BorderLayout.EAST);
@@ -204,6 +227,8 @@ public class ChatServerPanel extends JPanel
         if(maxScroll){
             chatText.setCaretPosition(chatText.getDocument().getLength()-1);
         }
+        if(!input.hasFocus())
+            input.setBackground(Color.RED);
     }
 
     public void sendMessage(MessageHolder s, boolean toSelf, ClientService originator){
